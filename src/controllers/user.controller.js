@@ -11,10 +11,12 @@ const generateRefreshAndAccessToken = async(userId)=>{
         const AccessToken = user.generateAccessToken()
         const RefreshToken = user.generateRefreshToken()
 
-        user.refreshToken = RefreshToken;
+        user.refreshToken = await RefreshToken;//promise wasted 3 hrs for this bug
         await user.save({validateBeforeSave:false})
 
+        console.log(user)
 
+        // console.log(AccessToken,RefreshToken)
         return {AccessToken,RefreshToken}
     }catch(error){
         throw new ApiError(500,"Something went Wrong while generating refresh and access token")
@@ -53,6 +55,7 @@ export const registerUser = asynchandler( async(req,res)=>{
     const avatarLocalPath = req.files?.avatar[0]?.path;
     // const coverImageLocalPath = req.files?.coverImage[0]?.path;
     //if there is no coverImage
+   
     let coverImageLocalPath;
     if(req.files && Array.isArray(req.files.coverImage) && req.files.coverImage.length > 0){
         coverImageLocalPath = req.files.coverImage[0].path
@@ -103,10 +106,10 @@ export const loginUser = asynchandler(async(req,res)=>{
 
     const {email,username,password} = req.body
 
-    if(!username || !email){
+    if(!username && !email){
         throw new ApiError(400,"username or email is required")
     }
-    const user = User.findOne({
+    const user = await User.findOne({
         $or:[{username},{email}]
     })
     if(!user){
@@ -119,7 +122,8 @@ export const loginUser = asynchandler(async(req,res)=>{
    }
    
    const{AccessToken,RefreshToken} = await generateRefreshAndAccessToken(user._id);
-   
+   const AccessTokenvalue = await AccessToken
+   const RefreshTokenValue = await RefreshToken
    //two option, update the user object or one more databse query
       // 2.database query
     const loggedInUser = await User.findById(user._id).select("-password -refreshToken")
@@ -131,14 +135,15 @@ export const loginUser = asynchandler(async(req,res)=>{
 
     return res
     .status(200)
-    .cookie("accessToken",AccessToken,options)
-    .cookie("refreshToken",RefreshToken,options)
+    .cookie("accessToken",AccessTokenvalue,options)
+    .cookie("refreshToken",RefreshTokenValue,options)
     .json(
         new ApiResponse(
             200,
             {
-                user: loggedInUser,AccessToken,
-                RefreshToken
+                user: loggedInUser,
+                AccessToken:AccessTokenvalue ,
+                RefreshToken:RefreshTokenValue
             },
             "User logged In Successfully"
         )

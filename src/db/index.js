@@ -3,8 +3,6 @@ import mongoose from "mongoose";
 import {DB_NAME} from "../constants.js"
 
 const options = {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
     // Set the write concern to 'majority'
     writeConcern: {
       w: 'majority',
