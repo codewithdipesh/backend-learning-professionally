@@ -3,7 +3,7 @@ import {asynchandler} from "../utils/asynchandler.js"
 import { User } from "../models/user.model.js"
 import { uploadOnCloudinary } from "../utils/cloudinary.js"
 import { ApiResponse } from "../utils/ApiResponse.js";
-
+import  Jwt  from "jsonwebtoken";
 
 const generateRefreshAndAccessToken = async(userId)=>{
     try{
@@ -14,7 +14,7 @@ const generateRefreshAndAccessToken = async(userId)=>{
         user.refreshToken = await RefreshToken;//promise wasted 3 hrs for this bug
         await user.save({validateBeforeSave:false})
 
-        console.log(user)
+        // console.log(user)
 
         // console.log(AccessToken,RefreshToken)
         return {AccessToken,RefreshToken}
@@ -178,3 +178,49 @@ export const LogOutUser = asynchandler(async(req,res)=>{
         new ApiResponse(200,{},"User Logged Out")
     )
 })
+
+export const refreshAccessToken = asynchandler(async(req,res)=>{
+
+    const incomingrefreshToken = req.cookies?.refreshToken || req.body.refreshToken
+    if (!incomingrefreshToken) {
+       throw new ApiError(401,"Unauthorized Acess!")
+    }
+    // console.log(incomingrefreshToken);
+    try {
+        const Decryptedtoken = Jwt.verify(incomingrefreshToken,process.env.REFRESH_TOKEN_SECRET);
+        // console.log(Decryptedtoken);
+        const user = await User.findById(Decryptedtoken?._id);
+        if(!user){
+            throw new ApiError(401,"Invalid Refresh Token")
+        }
+        if(user.refreshToken !== incomingrefreshToken){
+            throw new ApiError(401,"Refresh Token Expired!!")
+        }
+        const {AccessToken,RefreshToken} = await generateRefreshAndAccessToken(user._id)
+        const accessTokenvalue = await AccessToken;
+        const refreshTokenvalue = await RefreshToken;
+        const options = {
+            httpOnly:true,
+            secure:true
+        }
+    
+        return res
+        .status(200)
+        .cookie("accessToken",accessTokenvalue,options)
+        .cookie("refreshToken",refreshTokenvalue,options)
+        .json(
+            new ApiResponse(
+                200,
+                {accessToken : accessTokenvalue,refreshToken:refreshTokenvalue},
+                "Access token refreshed"
+            )
+        )
+    
+    } catch (error) {
+        throw new ApiError(401,error?.message || "Inavalid refresh token")
+    }
+
+
+
+
+})  
