@@ -103,7 +103,6 @@ export const loginUser = asynchandler(async(req,res)=>{
     // password check
     // access and refresh token
     // send cookie
-
     const {email,username,password} = req.body
 
     if(!username && !email){
@@ -224,3 +223,193 @@ export const refreshAccessToken = asynchandler(async(req,res)=>{
 
 
 })  
+
+export const changeCurrentPassword = asynchandler(async(req,res)=>{
+    const {currentPassword,newPassword} = req.body;
+    const user = await User.findById(req.user?._id)
+    
+    const isPasswordCorrect = await user.isPasswordCorrect(currentPassword)
+    if(!isPasswordCorrect){
+        throw new ApiError(400,"Ivalid current password")
+    }
+    user.password = newPassword;
+    await user.save({validateBeforeSave:false})
+    return res
+    .status(200)
+    .json(new ApiResponse(200,{},"Password changed Succesfully"))
+})
+
+export const getCurrentUser = asynchandler(async(req,res)=>{
+    return res
+    .status(200)
+    .json(new ApiResponse(200,req.user,"User fetched Successfully"))
+})
+
+export const updateAccountDetails = asynchandler(async(req,res)=>{
+    // get details
+    //find  the user using req.user.id
+    // update and save
+    
+    const {fullName,username} = req.body
+
+    if(!fullName || !username){
+        throw new ApiError(400,"All fields are required ");
+    }
+    const user = await User.findByIdAndUpdate(
+        req.user._id,
+        {
+            $set:{
+                fullName,
+                username
+            }
+        },
+        {
+            new:true
+        }
+        ).select("-password");
+
+    return res
+    .status(200)
+    .json(new ApiResponse(200,user,"Account Details Updated Successfully!!!"))
+    
+
+})
+// avatar coverimage update
+export const updateAvatar = asynchandler(async(req,res)=>{
+    //get the avatar from files
+    //cloudinary get string
+    //find and update
+    const avatarlocalpath = req.files?.path;
+    
+    if(!avatarlocalpath){
+        throw new ApiError(400,"Avatar is Required !!!");
+    }
+    const avatar = await uploadOnCloudinary(avatarlocalpath);
+    if(!avatar.url){
+        throw new ApiError(400,"Something Went wrong uploading the image")
+    }
+    const user = User.findByIdAndUpdate(
+        req.user,
+        {
+            $set:{
+                avatar : avatar.url
+            }
+        },{
+            new:true
+        }
+    ).select("-password");
+
+    return res
+    .status(200)
+    .json(
+        new ApiResponse(200,user,"Avatar Updated Successfully")
+    )
+
+
+})
+
+export const updateCoverImage = asynchandler(async(req,res)=>{
+    //get the avatar from files
+    //cloudinary get string
+    //find and update
+    const coverImagelocalpath = req.files?.path;
+    
+    if(!coverImagelocalpath){
+        throw new ApiError(400,"CoverImage is Required !!!");
+    }
+    const coverImage = await uploadOnCloudinary(coverImagelocalpath);
+    if(!coverImage.url){
+        throw new ApiError(400,"Something Went wrong uploading the image")
+    }
+    const user = User.findByIdAndUpdate(
+        req.user,
+        {
+            $set:{
+                coverImage : coverImage.url
+            }
+        },{
+            new:true
+        }
+    ).select("-password");
+
+    return res
+    .status(200)
+    .json(
+        new ApiResponse(200,user,"Avatar Updated Successfully")
+    )
+
+
+})
+
+export const getUserChannelProfile = asynchandler(async(req,res)=>{
+    const {username} = req.body
+    if(!username?.trim()){
+        throw new ApiError(400,"Username is required!!!");
+    }
+    const channel = await User.aggregate([
+        {
+            $match:
+            {
+                username:username?.toLowerCase()
+            }
+        },
+        {
+           $lookup:
+           {
+              from: "subscriptions", // in DATABASE ALL SCHEMAS ARE SAVED IN all owercase and plural 
+              localField:"_id",
+              foreignField:"channel",
+              as:"subcribers"
+           }
+        },
+        {
+           $lookup:
+           {
+              from: "subscriptions", // in DATABASE ALL SCHEMAS ARE SAVED IN all owercase and plural 
+              localField:"_id",
+              foreignField:"subscriber",
+              as:"subcribedTo"
+           }
+        },
+        {
+            $addFields:
+            {
+                subscribersCount : {
+                    $size:"$subcribers"
+                },
+                channelSubscribedToCount : {
+                    $size:"$subcribedTo"
+                },
+                isSubscribed:{
+                    $cond:{
+                        if:{$in:[req.user?._id,"$subscribers.subscriber"]},
+                        then:true,
+                        else:false
+                    }
+                }
+            }
+        },
+        {
+            $project:
+            {
+                fullName:1,
+                username:1,
+                avatar:1,
+                coverImage:1,
+                isSubscribed:1,
+                subscribersCount:1,
+                channelSubscribedToCount:1,
+            }
+        }
+    ])
+    
+    if(!channel?.length){
+        throw new ApiError(404,"channel doesn't exists")
+
+    }
+    return res
+    .status(200)
+    .json(
+        new ApiResponse(200,channel[0],"User channel fetched successfully")
+    )
+})
